@@ -1,6 +1,7 @@
 """Fetch NSE corporate announcements and store them in Supabase."""
 import os, sys, hashlib, datetime as dt
 import requests
+from signals import annotate
 
 SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
@@ -71,6 +72,8 @@ def sb(path, rows, prefer):
 
 
 def save_items(rows):
+    for r in rows:
+        r.update(annotate(r))
     for i in range(0, len(rows), 200):
         sb("items?on_conflict=external_id", rows[i:i + 200],
            "resolution=ignore-duplicates,return=minimal")

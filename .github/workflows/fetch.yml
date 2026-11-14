@@ -2,7 +2,12 @@ name: Fetch filings and news
 on:
   schedule:
     - cron: "*/15 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      rescore_all:
+        description: "Re-score ALL items (after tuning rules)"
+        type: boolean
+        default: false
 jobs:
   fetch:
     runs-on: ubuntu-latest
@@ -24,3 +29,10 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      - name: Score unscored items
+        if: always()
+        run: python fetcher/rescore.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          RESCORE_ALL: ${{ github.event.inputs.rescore_all }}

@@ -17,6 +17,9 @@ input{width:52%}
 .card{background:var(--card);margin:10px 12px;padding:12px;border-radius:12px}
 .badge{font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;margin-right:6px;border:1px solid}
 .official{color:var(--ok)}.media{color:var(--med)}
+.pill{font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;float:right}
+.positive{color:var(--ok)}.caution{color:#d33}.watch{color:#c80}
+.why{font-size:12px;margin:6px 0 0;color:var(--fg)}
 .chip{font-size:11px;background:var(--bg);border-radius:10px;padding:2px 7px;margin-right:4px}
 .body{color:var(--mut);font-size:13px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .meta{color:var(--mut);font-size:12px;margin-top:6px}
@@ -27,7 +30,8 @@ a{color:inherit}
 <input id="q" placeholder="Search company / symbol">
 <select id="src"><option value="">All sources</option><option>NSE</option><option>Economic Times</option><option>Business Standard</option><option>Mint</option><option>Moneycontrol</option><option>Reuters</option></select>
 <div class="tabs" id="tabs">
-<button class="tab on" data-t="all">All</button>
+<button class="tab on" data-t="signals">Signals</button>
+<button class="tab" data-t="all">All</button>
 <button class="tab" data-t="filings">Filings</button>
 <button class="tab" data-t="stocknews">Stock news</button>
 <button class="tab" data-t="market">Market &amp; economy</button>
@@ -37,10 +41,12 @@ a{color:inherit}
 <script src="config.js"></script>
 <script>
 const $=id=>document.getElementById(id), esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-let tab="all";
+let tab="signals";
 async function load(){
   const {SUPABASE_URL:u,SUPABASE_ANON_KEY:k}=window.CONFIG;
   let url=`${u}/rest/v1/items?select=*&order=published_at.desc.nullslast&limit=100`;
+  if(tab==="signals"){const d=new Date(Date.now()-3*864e5).toISOString();
+    url=`${u}/rest/v1/items?select=*&signal=neq.neutral&score=gte.2&published_at=gte.${d}&order=score.desc,published_at.desc&limit=100`;}
   if(tab==="filings") url+="&kind=eq.official";
   if(tab==="stocknews") url+="&kind=eq.media&matched_symbols=not.eq.{}";
   if(tab==="market") url+="&kind=eq.media&matched_symbols=eq.{}";
@@ -55,9 +61,10 @@ async function load(){
       const off=i.kind==="official";
       const chips=(i.matched_symbols||[]).map(s=>`<span class="chip">${esc(s)}</span>`).join("");
       return `<div class="card">
+      ${i.signal&&i.signal!=="neutral"?`<span class="pill ${i.signal}">${{positive:"▲ POSITIVE",caution:"▼ CAUTION",watch:"● WATCH"}[i.signal]} ${i.score}/10</span>`:""}
       <span class="badge ${off?"official":"media"}">${off?"OFFICIAL":"MEDIA"} · ${esc(i.source)}</span>
       <b>${esc(i.company||i.symbol||"")}</b>
-      <p>${esc(i.title)}</p>${i.body?`<div class="body">${esc(i.body)}</div>`:""}
+      <p>${esc(i.title)}</p>${i.reason?`<div class="why">Why: ${esc(i.reason)}</div>`:""}${i.body?`<div class="body">${esc(i.body)}</div>`:""}
       <div class="meta">${chips} ${i.published_at?new Date(i.published_at).toLocaleString():""}
       ${i.url?` · <a href="${esc(i.url)}" target="_blank" rel="noopener">Read original</a>`:""}</div></div>`}).join("")
       :'<p class="card">Nothing here yet.</p>';
