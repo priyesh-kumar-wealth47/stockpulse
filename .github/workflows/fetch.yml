@@ -1,4 +1,4 @@
-name: Fetch filings
+name: Fetch filings and news
 on:
   schedule:
     - cron: "*/15 * * * *"
@@ -6,14 +6,21 @@ on:
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install -r fetcher/requirements.txt
-      - run: python fetcher/fetch_filings.py
+      - name: NSE filings
+        run: python fetcher/fetch_filings.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      - name: Media news
+        if: always()
+        run: python fetcher/fetch_media.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

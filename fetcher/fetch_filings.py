@@ -1,4 +1,4 @@
-"""Fetch NSE + BSE corporate announcements and store them in Supabase."""
+"""Fetch NSE corporate announcements and store them in Supabase."""
 import os, sys, hashlib, datetime as dt
 import requests
 
@@ -33,11 +33,21 @@ def fetch_nse():
         "Referer": "https://www.nseindia.com/companies-listing/corporate-filings-announcements",
     })
     s.get("https://www.nseindia.com", timeout=20)  # sets required cookies
-    r = s.get("https://www.nseindia.com/api/corporate-announcements",
-              params={"index": "equities"}, timeout=30)
-    r.raise_for_status()
+    url = "https://www.nseindia.com/api/corporate-announcements"
+    today = dt.datetime.now(IST)
+    dated = {"index": "equities",
+             "from_date": (today - dt.timedelta(days=1)).strftime("%d-%m-%Y"),
+             "to_date": today.strftime("%d-%m-%Y")}
+    try:  # date range returns far more than the latest 20
+        r = s.get(url, params=dated, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+    except Exception:
+        r = s.get(url, params={"index": "equities"}, timeout=30)
+        r.raise_for_status()
+        data = r.json()
     out = []
-    for a in r.json():
+    for a in data:
         title = (a.get("desc") or "").strip()
         if not title:
             continue
@@ -52,45 +62,6 @@ def fetch_nse():
         })
     return out
 
-
-def fetch_bse():
-    now = dt.datetime.now(IST)
-    to_d = now.strftime("%Y%m%d")
-    from_d = (now - dt.timedelta(days=2)).strftime("%Y%m%d")
-    s = requests.Session()
-    s.headers.update({
-        "User-Agent": UA,
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.bseindia.com/corporates/ann.html",
-        "Origin": "https://www.bseindia.com",
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-site",
-    })
-    s.get("https://www.bseindia.com/corporates/ann.html", timeout=20)  # get cookies first
-    params = {"pageno": 1, "strCat": "-1", "subcategory": "-1",
-              "strPrevDate": from_d, "strScrip": "", "strSearch": "P",
-              "strToDate": to_d, "strType": "C"}
-    r = s.get("https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w",
-              params=params, timeout=30)
-    r.raise_for_status()
-    out = []
-    for a in r.json().get("Table", []):
-        title = (a.get("HEADLINE") or a.get("NEWSSUB") or "").strip()
-        if not title:
-            continue
-        att = a.get("ATTACHMENTNAME")
-        out.append({
-            "external_id": make_id("BSE", a.get("NEWSID") or "", a.get("SCRIP_CD"), title),
-            "kind": "official", "source": "BSE",
-            "symbol": str(a.get("SCRIP_CD") or "") or None,
-            "company": a.get("SLONGNAME"),
-            "title": title, "body": (a.get("NEWSSUB") or "").strip() or None,
-            "url": f"https://www.bseindia.com/xml-data/corpfiling/AttachLive/{att}" if att else None,
-            "published_at": parse_dt(a.get("NEWS_DT"), ["%Y-%m-%dT%H:%M:%S"]),
-        })
-    return out
 
 def sb(path, rows, prefer):
     h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
