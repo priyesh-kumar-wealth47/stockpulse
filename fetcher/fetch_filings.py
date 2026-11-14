@@ -54,15 +54,24 @@ def fetch_nse():
 
 
 def fetch_bse():
-    today = dt.datetime.now(IST).strftime("%Y%m%d")
+    now = dt.datetime.now(IST)
+    to_d = now.strftime("%Y%m%d")
+    from_d = (now - dt.timedelta(days=2)).strftime("%Y%m%d")
     s = requests.Session()
     s.headers.update({
-        "User-Agent": UA, "Accept": "application/json, text/plain, */*",
-        "Referer": "https://www.bseindia.com/", "Origin": "https://www.bseindia.com",
+        "User-Agent": UA,
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.bseindia.com/corporates/ann.html",
+        "Origin": "https://www.bseindia.com",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-site",
     })
+    s.get("https://www.bseindia.com/corporates/ann.html", timeout=20)  # get cookies first
     params = {"pageno": 1, "strCat": "-1", "subcategory": "-1",
-              "strPrevDate": today, "strScrip": "", "strSearch": "P",
-              "strToDate": today, "strType": "C"}
+              "strPrevDate": from_d, "strScrip": "", "strSearch": "P",
+              "strToDate": to_d, "strType": "C"}
     r = s.get("https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w",
               params=params, timeout=30)
     r.raise_for_status()
@@ -82,7 +91,6 @@ def fetch_bse():
             "published_at": parse_dt(a.get("NEWS_DT"), ["%Y-%m-%dT%H:%M:%S"]),
         })
     return out
-
 
 def sb(path, rows, prefer):
     h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
