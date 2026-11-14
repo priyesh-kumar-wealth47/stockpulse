@@ -13,8 +13,7 @@ FEEDS = [
     ("Business Standard", "https://www.business-standard.com/rss/companies-101.rss"),
     ("Mint", "https://www.livemint.com/rss/markets"),
     ("Mint", "https://www.livemint.com/rss/companies"),
-    ("Moneycontrol", "https://www.moneycontrol.com/rss/marketreports.xml"),
-    ("Moneycontrol", "https://www.moneycontrol.com/rss/business.xml"),
+    ("Moneycontrol", "https://news.google.com/rss/search?q=site:moneycontrol.com+(stocks+OR+markets+OR+results)&hl=en-IN&gl=IN&ceid=IN:en"),
     # Reuters has no official RSS; Google News filtered to reuters.com
     ("Reuters", "https://news.google.com/rss/search?q=site:reuters.com+India+(stocks+OR+markets+OR+economy)&hl=en-IN&gl=IN&ceid=IN:en"),
 ]
@@ -120,7 +119,7 @@ def parse_feed(publisher, xml, matcher):
     for e in feedparser.parse(xml).entries:
         title = clean(e.get("title"), 300)
         if publisher == "Reuters":
-            title = re.sub(r"\s+-\s+Reuters$", "", title)
+            title = re.sub(r"\s+-\s+(Reuters|Moneycontrol)$", "", title)
         if not title:
             continue
         body = clean(e.get("summary"))
