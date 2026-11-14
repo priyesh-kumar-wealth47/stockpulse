@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StockPulse – Day 1</title>
+<style>
+:root{--bg:#fff;--fg:#111;--mut:#666;--card:#f4f5f7;--ok:#0a7d33}
+@media(prefers-color-scheme:dark){:root{--bg:#111;--fg:#eee;--mut:#999;--card:#1c1d20;--ok:#4cd07d}}
+body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+header{position:sticky;top:0;background:var(--bg);padding:12px;border-bottom:1px solid var(--card)}
+h1{font-size:18px;margin:0 0 8px}
+input,select{padding:8px;border-radius:8px;border:1px solid var(--mut);background:var(--card);color:var(--fg);font-size:14px}
+input{width:58%}
+.card{background:var(--card);margin:10px 12px;padding:12px;border-radius:12px}
+.badge{font-size:11px;font-weight:700;color:var(--ok);border:1px solid var(--ok);border-radius:6px;padding:1px 6px;margin-right:6px}
+.meta{color:var(--mut);font-size:12px;margin-top:6px}
+a{color:inherit}
+</style></head><body>
+<header>
+<h1>Official Filings</h1>
+<input id="q" placeholder="Search company / symbol">
+<select id="src"><option value="">All</option><option>NSE</option><option>BSE</option></select>
+</header>
+<main id="list"><p class="card">Loading…</p></main>
+<script src="config.js"></script>
+<script>
+const $=id=>document.getElementById(id), esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+async function load(){
+  const {SUPABASE_URL:u,SUPABASE_ANON_KEY:k}=window.CONFIG;
+  let url=`${u}/rest/v1/items?select=*&order=published_at.desc.nullslast&limit=100`;
+  if($("src").value) url+=`&source=eq.${$("src").value}`;
+  const q=$("q").value.trim().replace(/[,()*]/g,"");
+  if(q) url+=`&or=(company.ilike.*${q}*,symbol.ilike.*${q}*,title.ilike.*${q}*)`;
+  try{
+    const r=await fetch(url,{headers:{apikey:k,Authorization:`Bearer ${k}`}});
+    if(!r.ok) throw new Error(r.status);
+    const rows=await r.json();
+    $("list").innerHTML=rows.length?rows.map(i=>`<div class="card">
+      <span class="badge">OFFICIAL · ${esc(i.source)}</span><b>${esc(i.company||i.symbol)}</b>
+      <p>${esc(i.title)}</p>
+      <div class="meta">${i.published_at?new Date(i.published_at).toLocaleString():""}
+      ${i.url?` · <a href="${esc(i.url)}" target="_blank" rel="noopener">Read original</a>`:""}</div></div>`).join("")
+      :'<p class="card">No filings yet. Run the fetcher once.</p>';
+  }catch(e){$("list").innerHTML=`<p class="card">Could not load (${esc(e.message)}). Check config.js.</p>`}
+}
+$("q").oninput=()=>{clearTimeout(window.t);window.t=setTimeout(load,300)};
+$("src").onchange=load; load();
+</script></body></html>
