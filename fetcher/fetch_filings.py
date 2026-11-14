@@ -114,7 +114,7 @@ def record_health(source, status, count, error=None):
 
 def main():
     ok = 0
-    for name, fn in (("NSE", fetch_nse), ("BSE", fetch_bse)):
+    for name, fn in (("NSE", fetch_nse),):
         try:
             rows = fn()
             save_items(rows)
