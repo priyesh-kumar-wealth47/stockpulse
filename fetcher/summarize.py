@@ -66,9 +66,9 @@ def parse_ai(text, items):
     return out
 
 
-def pick_gemini_model():
+def pick_gemini_models():
     if os.environ.get("GEMINI_MODEL"):
-        return os.environ["GEMINI_MODEL"]
+        return [os.environ["GEMINI_MODEL"]]
     r = requests.get("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
                      headers={"x-goog-api-key": GEMINI_KEY}, timeout=30)
     r.raise_for_status()
@@ -79,19 +79,30 @@ def pick_gemini_model():
     ok = [n for n in names if "flash" in n and not any(b in n for b in bad)]
     lite = sorted([n for n in ok if "lite" in n], reverse=True)
     rest = sorted([n for n in ok if "lite" not in n], reverse=True)
-    return (lite + rest)[0] if ok else None
+    # prefer fixed versions over "-latest" aliases (aliases are often overloaded), keep order otherwise
+    ordered = [n for n in lite + rest if "latest" not in n] + [n for n in lite + rest if "latest" in n]
+    return ordered[:3]
 
 
 def call_gemini(items, model):
-    r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                      headers={"x-goog-api-key": GEMINI_KEY},
-                      json={"contents": [{"parts": [{"text": prompt_for(items)}]}],
-                            "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"}},
-                      timeout=60)
+    for attempt, wait in enumerate((0, 5, 15)):
+        time.sleep(wait)
+        r = _gemini_request(items, model)
+        if r.status_code not in (500, 502, 503, 504):
+            break
+        print(f"[summaries] {model}: HTTP {r.status_code}, retry {attempt + 1}/3")
     if r.status_code == 429:
         raise RateLimited("gemini")
     r.raise_for_status()
     return parse_ai(r.json()["candidates"][0]["content"]["parts"][0]["text"], items)
+
+
+def _gemini_request(items, model):
+    return requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                      headers={"x-goog-api-key": GEMINI_KEY},
+                      json={"contents": [{"parts": [{"text": prompt_for(items)}]}],
+                            "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"}},
+                      timeout=60)
 
 
 def pick_groq_model():
@@ -165,8 +176,7 @@ def ai_pass():
     providers = []
     try:
         if GEMINI_KEY:
-            m = pick_gemini_model()
-            if m:
+            for m in pick_gemini_models():
                 providers.append(("gemini", call_gemini, m))
         if GROQ_KEY:
             m = pick_groq_model()
@@ -184,11 +194,11 @@ def ai_pass():
                 break
             except RateLimited:
                 print(f"[summaries] {name} rate-limited; skipping it this run")
-                providers = [p for p in providers if p[0] != name]
+                providers = [p for p in providers if p[0] != name]  # quota is shared per project
             except Exception as e:
-                err = f"{name}: {type(e).__name__}: {str(e)[:150]}"
-                print(f"[summaries] {err}")
-                providers = [p for p in providers if p[0] != name]
+                err = f"{name}/{model}: {type(e).__name__}: {str(e)[:150]}"
+                print(f"[summaries] {err} - trying next option")
+                providers = [p for p in providers if p[2] != model]
         if not providers and result is None:
             break
         if result:
