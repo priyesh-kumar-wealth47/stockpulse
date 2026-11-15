@@ -26,6 +26,8 @@ CASES = [
  ("Update", "No pledge has been created by promoters", "official", True, "neutral", None),
  ("RBI cuts repo rate; profit surges for banks", "", "media", False, "positive", None),
  ("Outcome of Board Meeting", "Board approves bonus issue and stock split", "official", True, "positive", "bonus_split"),
+ ("Bitcoin billion-dollar wipeouts: large liquidation events", "", "media", True, "neutral", None),
+ ("ABC Ltd enters liquidation, creditors move NCLT", "", "media", True, "caution", "default_risk"),
  ("Fire at plant halts production at ABC Ltd", "", "media", True, "caution", "ops_halt"),
 ]
 SCORES = [  # (title, body, kind, has_stock, min_score, max_score)

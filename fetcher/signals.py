@@ -52,7 +52,7 @@ RULES = [
  ("results_weak", "neg", 3, "any", "Weak results",
   r"\b(net loss|loss widens|widened loss|swings? to (a )?loss|slips? into (the )?red|turns? loss-making|reports? (a )?(net )?loss|posts? (a )?(net )?loss|profit (falls?|drops?|plunges?|declines?|slumps?|dips?|tumbles?|sinks?|down \d)|(PAT|net profit) (down|falls?|declines?|drops?)|misses? (street )?(estimates|expectations)|below (street )?estimates|revenue (falls?|declines?|drops?))\b", None),
  ("default_risk", "neg", 4, "any", "Default / insolvency risk",
-  r"\b(insolvency|CIRP|bankruptcy|liquidation|winding[- ]up|loan default|defaults? on|defaulted|fails? to repay|missed (a |the )?(payment|repayment|interest))\b", None),
+  r"\b(insolvency|CIRP|bankruptcy|liquidation (proceedings?|petition|order)|(goes?|going|enters?|into) (into )?liquidation|liquidators?|winding[- ]up|loan default|defaults? on|defaulted|fails? to repay|missed (a |the )?(payment|repayment|interest))\b", None),
  ("fraud", "neg", 4, "any", "Fraud / forensic concerns",
   r"\b(fraud|forensic audit|misappropriat\w+|diversion of funds|whistle-?blower|embezzl\w+|siphon\w*)\b", r"\b(denies|denied|rejects?|baseless)\b"),
  ("ops_halt", "neg", 2, "any", "Operations halted",

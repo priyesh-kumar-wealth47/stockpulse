@@ -95,6 +95,8 @@ class Matcher:
         found = []
         if self.rx:
             for m in self.rx.findall(norm_words(text)):
+                if " " not in m and not re.search(r"\b(" + re.escape(m.capitalize()) + "|" + re.escape(m.upper()) + r")\b", text):
+                    continue  # one-word names must appear Capitalised or UPPER in the text
                 found.append(self.alias[m])
         for w in set(re.findall(r"\b[A-Z][A-Z0-9&]{2,}\b", text)):
             if w in self.symbols and w not in SYMBOL_STOP:

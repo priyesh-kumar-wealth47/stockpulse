@@ -50,6 +50,7 @@ svg .fill{fill:currentColor}
 .card.in .candle i{height:calc(var(--s) * 10%);min-height:var(--min,0px)}
 .card.positive .candle i,.card.caution .candle i,.card.watch .candle i{--min:8px}
 .cbody{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;padding:18px 18px 16px 14px;overflow-y:auto}
+.cbody>*{flex-shrink:0}
 .head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
 .who{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:.82rem;color:var(--muted);padding-top:4px}
 .trust{display:inline-flex;align-items:center;gap:4px;font-weight:600;border-radius:999px;padding:2px 9px 2px 7px;border:1.5px solid var(--brand);color:var(--brand)}
@@ -60,8 +61,8 @@ svg .fill{fill:currentColor}
 .sig b small{font:600 .85rem var(--body);color:var(--muted);letter-spacing:0}
 .sig span{display:block;margin-top:4px;font-size:.8rem;font-weight:600}
 .co{font-size:.9rem;font-weight:600;color:var(--muted)}
-.title{font:700 1.5rem/1.18 var(--head);letter-spacing:-.015em;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
-.summary{font-size:1.02rem;line-height:1.6;color:color-mix(in srgb,var(--ink) 88%,transparent);max-width:62ch}
+.title{font:700 clamp(1.25rem,3.2dvh,1.5rem)/1.18 var(--head);letter-spacing:-.015em;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+.summary{font-size:clamp(.95rem,2.2dvh,1.02rem);line-height:1.55;color:color-mix(in srgb,var(--ink) 88%,transparent);max-width:62ch}
 .ai{font-size:.75rem;color:var(--muted)}
 .why{font-size:.9rem;border-radius:12px;padding:10px 12px;background:color-mix(in srgb,var(--c) 10%,var(--surface))}
 .why b{font-weight:600;color:var(--c)}
