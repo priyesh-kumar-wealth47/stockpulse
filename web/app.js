@@ -40,7 +40,9 @@ const state = {
   tab: "opps", f: { ...DEFAULTS, ...store.get("sp_filters", {}) }, items: [], seen: new Set(),
   offset: 0, done: false, loading: false, gen: 0, loadedAt: 0,
   watch: store.get("sp_watch", []).filter(s => /^[A-Z0-9&-]+$/.test(s)),
-  names: {}, sect: {}, companies: [], ready: Promise.resolve(), theme: store.get("sp_theme", "auto")
+  names: {}, sect: {}, companies: [], ready: Promise.resolve(),
+  call: { rating: "all", mine: false, ...store.get("sp_call", {}) },
+  alerts: { watchMin: 3, globalMin: 7, ...store.get("sp_alerts", {}) }, theme: store.get("sp_theme", "auto")
 };
 const feed = $("#feed");
 
@@ -52,6 +54,13 @@ async function api(path) {
 }
 const sinceISO = d => new Date(Date.now() - d * 864e5).toISOString();
 function buildQuery() {
+  if (state.tab === "calls") {
+    const q = ["select=*", `published_at=gte.${encodeURIComponent(sinceISO(7))}`, "order=published_at.desc.nullslast"];
+    if (state.call.rating !== "all") q.push(`rating=eq.${state.call.rating}`);
+    if (state.call.mine && state.watch.length) q.push(`symbol=in.(${state.watch.map(encodeURIComponent).join(",")})`);
+    q.push(`limit=${PAGE}`, `offset=${state.offset}`);
+    return `analyst_calls?${q.join("&")}`;
+  }
   const f = state.f, p = [`select=${FIELDS}`];
   const sectorMode = f.sector !== "all";
   if (state.tab === "opps") {
@@ -100,10 +109,32 @@ function ago(iso) {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 const symbolsOf = it => (it.symbol ? [it.symbol] : (it.matched_symbols || []));
+const RATE_CLASS = { Buy: "positive", Sell: "caution", Hold: "watch" };
+function callPhrase(c) {
+  const r = c.rating;
+  if (c.action === "upgrade") return r ? `upgrades to ${r}` : "raises the target";
+  if (c.action === "downgrade") return r ? `downgrades to ${r}` : "cuts the target";
+  if (c.action === "initiate") return r ? `starts coverage with ${r}` : "starts coverage";
+  if (c.action === "maintain") return r ? `maintains ${r}` : "maintains its view";
+  return r ? `rates it ${r}` : "has a view";
+}
+function callHTML(c) {
+  const url = safeUrl(c.url), co = state.names[c.symbol] || "";
+  const tgt = c.target ? ` with a target of \u20b9${Number(c.target).toLocaleString("en-IN")}` : "";
+  return `<article class="card call ${RATE_CLASS[c.rating] || "neutral"}" style="--s:10">
+  <div class="candle" aria-hidden="true"><i></i></div>
+  <div class="cbody">
+    <div class="head"><div class="who"><span class="trust media">Reported by ${esc(c.source)}</span></div>${c.rating ? `<div class="sig"><b class="rate">${esc(c.rating)}</b></div>` : ""}</div>
+    ${co ? `<div class="co">${esc(co)}</div>` : ""}
+    <h2 class="title small">${esc(c.broker)} ${esc(callPhrase(c))}${tgt}</h2>
+    <div class="chips"><button class="chip" data-sym="${esc(c.symbol)}" aria-pressed="${state.watch.includes(c.symbol)}" aria-label="Watch ${esc(c.symbol)}">${STAR}${esc(c.symbol)}</button></div>
+    <div class="foot"><span>${ago(c.published_at)}</span>${url ? `<a class="go" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Read original</a>` : ""}</div>
+  </div></article>`;
+}
 function cardHTML(it) {
   const sig = it.signal && it.signal !== "neutral" ? it.signal : "neutral";
   const syms = [...new Set(symbolsOf(it))];
-  const co = it.company || (syms[0] && state.names[syms[0]]) || "";
+  const co = it.company || (syms.length < 3 && syms[0] && state.names[syms[0]]) || "";
   const official = it.kind === "official";
   const text = it.summary || it.body || "";
   const ai = it.summary_source === "gemini" || it.summary_source === "groq";
@@ -133,7 +164,7 @@ const ioMore = "IntersectionObserver" in window ? new IntersectionObserver(es =>
 
 function appendCards(rows) {
   const frag = document.createElement("div");
-  frag.innerHTML = rows.map(cardHTML).join("");
+  frag.innerHTML = rows.map(state.tab === "calls" ? callHTML : cardHTML).join("");
   const cards = [...frag.children];
   cards.forEach(c => { feed.append(c); io ? io.observe(c) : c.classList.add("in"); });
   if (ioMore) { ioMore.disconnect(); const all = $$(".card", feed); const t = all[Math.max(0, all.length - 4)]; if (t) ioMore.observe(t); }
@@ -152,15 +183,15 @@ async function loadPage(first) {
     await Promise.race([state.ready, new Promise(r => setTimeout(r, 1500))]);
     let rows = await api(buildQuery());
     if (gen !== state.gen) return;
-    if (state.f.sector !== "all") {
+    if (state.f.sector !== "all" && state.tab !== "calls") {
       rows = rows.filter(it => symbolsOf(it).some(s => state.sect[s] === state.f.sector));
       state.done = true;
     } else {
       state.offset += rows.length;
       if (rows.length < PAGE) state.done = true;
     }
-    rows = rows.filter(r => !state.seen.has(r.external_id));
-    rows.forEach(r => state.seen.add(r.external_id));
+    rows = rows.filter(r => !state.seen.has(r.external_id || r.call_id));
+    rows.forEach(r => state.seen.add(r.external_id || r.call_id));
     if (first) feed.innerHTML = "";
     if (!rows.length && first) return showNote(...emptyCopy());
     appendCards(rows);
@@ -172,13 +203,14 @@ async function loadPage(first) {
 }
 const loadMore = () => loadPage(false);
 function emptyCopy() {
+  if (state.tab === "calls") return ["No broker calls found", "Calls appear when a publisher reports a rating or target price. Try All calls or check back later.", null];
   if (state.tab === "watch") return ["No news on your stocks yet", "Nothing matched your stocks in the stored news. New items appear here as they arrive.", null];
   if (state.tab === "opps") return ["No signals match these filters", "Lower the minimum score or widen the time range in Filters.", ["Open filters", "filters"]];
   return ["Nothing found", "Try a longer time range or fewer filters.", ["Open filters", "filters"]];
 }
 function reload() {
   state.gen++; state.items = []; state.seen = new Set(); state.offset = 0; state.done = false; state.loading = false;
-  feed.classList.toggle("list", state.tab === "browse");
+  feed.classList.toggle("list", state.tab === "browse" || state.tab === "calls");
   feed.scrollTop = 0; skeleton(); loadPage(true);
   const d = JSON.stringify(state.f) !== JSON.stringify(DEFAULTS); $("#filter-dot").hidden = !d;
 }
@@ -191,13 +223,64 @@ function toggleWatch(sym) {
   store.set("sp_watch", state.watch);
   $$(`[data-sym="${qa(sym)}"]`).forEach(b => b.setAttribute("aria-pressed", String(state.watch.includes(sym))));
   $$(`.star[data-star="${qa(sym)}"]`).forEach(b => b.setAttribute("aria-pressed", String(state.watch.includes(sym))));
-  renderStrip();
-  if (state.tab === "watch") reloadSoon();
+  renderStrip(); syncPushSoon();
+  if (state.tab === "watch" || (state.tab === "calls" && state.call.mine)) reloadSoon();
 }
 function renderStrip() {
-  const s = $("#watch-strip"); s.hidden = state.tab !== "watch";
+  const s = $("#watch-strip");
+  if (state.tab === "calls") {
+    s.hidden = false;
+    s.innerHTML = ["all", "Buy", "Hold", "Sell"].map(r => `<button class="pill sel" data-call="rating:${r}" aria-pressed="${state.call.rating === r}">${r === "all" ? "All calls" : r}</button>`).join("")
+      + `<button class="pill sel" data-call="mine" aria-pressed="${state.call.mine}">My stocks</button>`;
+    return;
+  }
+  s.hidden = state.tab !== "watch";
   s.innerHTML = state.watch.map(w => `<span class="pill">${esc(w)}<i role="button" tabindex="0" data-rm="${esc(w)}" aria-label="Remove ${esc(w)}">&times;</i></span>`).join("") + '<button class="pill add" data-act="add">Add stock</button>';
 }
+
+// ---------- alerts (web push), install, offline ----------
+const VAPID = (window.CONFIG || {}).VAPID_PUBLIC_KEY;
+const pushOK = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const u8 = b64 => { const r = atob((b64 + "=".repeat((4 - b64.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from([...r].map(c => c.charCodeAt(0))); };
+async function rpc(fn, args) {
+  const r = await fetch(`${U}/rest/v1/rpc/${fn}`, { method: "POST", headers: { apikey: K, Authorization: `Bearer ${K}`, "Content-Type": "application/json" }, body: JSON.stringify(args) });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+const getSub = async () => pushOK ? (await navigator.serviceWorker.ready).pushManager.getSubscription() : null;
+async function saveSub(sub) {
+  const j = sub.toJSON();
+  await rpc("save_push_sub", { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_symbols: state.watch, p_watch_min: state.alerts.watchMin, p_global_min: state.alerts.globalMin });
+}
+let ps; function syncPushSoon() { clearTimeout(ps); ps = setTimeout(async () => { try { const sub = await getSub(); if (sub) await saveSub(sub); } catch {} }, 1500); }
+async function updateAlertsUI() {
+  const st = $("#alerts-status"), b = $("#alerts-btn"); b.hidden = true;
+  if (!VAPID) return void (st.textContent = "Alerts are not set up yet. Add VAPID_PUBLIC_KEY to config.js.");
+  if (!pushOK) return void (st.textContent = /iPhone|iPad|iPod/.test(navigator.userAgent) ? "On iPhone, add this app to your Home Screen first, then open it from there." : "This browser does not support alerts.");
+  if (Notification.permission === "denied") return void (st.textContent = "Notifications are blocked for this site. Allow them in your browser's site settings.");
+  const sub = await getSub().catch(() => null);
+  b.hidden = false; b.textContent = sub ? "Turn off alerts" : "Turn on alerts";
+  st.textContent = sub ? "Alerts are on for this device." : "Alerts are off.";
+}
+$("#alerts-btn").onclick = async () => {
+  const st = $("#alerts-status");
+  try {
+    const sub = await getSub();
+    if (sub) { await rpc("delete_push_sub", { p_endpoint: sub.endpoint }); await sub.unsubscribe(); }
+    else {
+      if (await Notification.requestPermission() !== "granted") throw new Error("notifications were not allowed");
+      const reg = await navigator.serviceWorker.ready;
+      await saveSub(await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u8(VAPID) }));
+    }
+  } catch (e) { st.textContent = `Could not change alerts: ${e.message}`; return; }
+  updateAlertsUI();
+};
+let installEvt;
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; $("#install").hidden = false; });
+window.addEventListener("appinstalled", () => { $("#install").hidden = true; });
+$("#install").onclick = async () => { if (installEvt) { installEvt.prompt(); await installEvt.userChoice; installEvt = null; $("#install").hidden = true; } };
+const setOffline = () => { $("#offline").hidden = navigator.onLine !== false; };
+window.addEventListener("online", () => { setOffline(); reload(); }); window.addEventListener("offline", setOffline); setOffline();
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 
 // ---------- tabs, sheet, search, theme ----------
 function setTab(t) {
@@ -208,6 +291,8 @@ function setTab(t) {
 }
 function syncSheet() {
   $$("[data-f]").forEach(g => $$("button", g).forEach(b => b.setAttribute("aria-pressed", String(String(state.f[g.dataset.f]) === b.dataset.v))));
+  $$("[data-a]").forEach(g => $$("button", g).forEach(b => b.setAttribute("aria-pressed", String(String(state.alerts[g.dataset.a]) === b.dataset.v))));
+  updateAlertsUI();
   $("#minScore").value = state.f.minScore; $("#minScoreVal").textContent = state.f.minScore;
 }
 let lastFocus;
@@ -258,6 +343,12 @@ document.addEventListener("click", e => {
   if (t.dataset.star) return toggleWatch(t.dataset.star);
   if (t.dataset.rm) return toggleWatch(t.dataset.rm);
   if (t.dataset.tab) return setTab(t.dataset.tab);
+  if (t.dataset.call) {
+    if (t.dataset.call === "mine") state.call.mine = !state.call.mine; else state.call.rating = t.dataset.call.split(":")[1];
+    store.set("sp_call", state.call); renderStrip(); return reloadSoon();
+  }
+  const ga = t.closest("[data-a]");
+  if (ga && t.dataset.v !== undefined) { state.alerts[ga.dataset.a] = Number(t.dataset.v); store.set("sp_alerts", state.alerts); syncSheet(); return syncPushSoon(); }
   const act = t.dataset.act;
   if (act === "add") return openSearch("add");
   if (act === "retry") return reload();

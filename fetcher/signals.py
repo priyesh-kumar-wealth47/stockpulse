@@ -128,7 +128,12 @@ def size_bonus(text, ids):
     return b, note
 
 
-def analyze(title, body, kind, has_stock):
+ROUNDUP = re.compile(r"\b(stocks? (to|in) (watch|focus|news)|stocks? to buy|shares? to (watch|buy)|top (gainers|losers|picks)|"
+                     r"upcoming (dividends?|corporate actions?|ipos?)|ex-?dividend|record dates?|corporate actions?|"
+                     r"market (wrap|live|today)|buzzing stocks|stock picks|results today|results calendar|stocks? .{0,20}radar)\b", I)
+
+
+def analyze(title, body, kind, has_stock, n_stocks=0):
     text = f"{title or ''}. {(body or '')[:1500]}"
     hits = []  # (kind, weight, id, label, snippet)
     for rid, k, w, scope, label, rx, ex in _COMPILED:
@@ -169,12 +174,15 @@ def analyze(title, body, kind, has_stock):
         reason += f" [{note}]"
     if side is None:
         reason = "Mixed signals - " + reason
+    if kind == "media" and (ROUNDUP.search(title or "") or n_stocks >= 3):
+        mag = min(mag, 3)
+        reason = "Roundup article, several stocks: " + reason
     return mag, sig, pick[0][2], reason
 
 
 def annotate(row):
     score, sig, cat, reason = analyze(
         row.get("title"), row.get("body"), row.get("kind", "official"),
-        bool(row.get("symbol") or row.get("matched_symbols")))
+        bool(row.get("symbol") or row.get("matched_symbols")), len(row.get("matched_symbols") or []))
     return {"score": score, "score_base": score, "signal": sig, "category": cat, "reason": reason,
             "scored_at": dt.datetime.now(dt.timezone.utc).isoformat()}

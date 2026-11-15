@@ -28,6 +28,7 @@ CASES = [
  ("Outcome of Board Meeting", "Board approves bonus issue and stock split", "official", True, "positive", "bonus_split"),
  ("Bitcoin billion-dollar wipeouts: large liquidation events", "", "media", True, "neutral", None),
  ("ABC Ltd enters liquidation, creditors move NCLT", "", "media", True, "caution", "default_risk"),
+ ("Upcoming dividend, stock splits, buyback: MRF, SCI, PFC", "record dates Nov 16-20", "media", True, "positive", None),
  ("Fire at plant halts production at ABC Ltd", "", "media", True, "caution", "ops_halt"),
 ]
 SCORES = [  # (title, body, kind, has_stock, min_score, max_score)
@@ -50,3 +51,6 @@ for t, b, k, hs, es, ec in CASES:
     print(("OK  " if ok else "FAIL"), sig, s, cat, "|", t[:50], "|", why)
 print(f"\n{len(CASES)-bad}/{len(CASES)} passed")
 raise SystemExit(bad > 0)
+
+assert analyze("Upcoming dividend, stock splits, buyback: MRF, SCI, PFC", "record dates", "media", True, 4)[0] <= 3
+print("roundup capped OK")
