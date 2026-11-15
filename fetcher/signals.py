@@ -84,6 +84,50 @@ _COMPILED = [(i, k, w, sc, lab, re.compile(p, I), re.compile(x, I) if x else Non
              for i, k, w, sc, lab, p, x in RULES]
 
 
+# ---------- Day 4 calibration: size of event + strong wording ----------
+AMT = re.compile(r"(?:\u20b9|\brs\.?|\binr)\s*([\d,]+(?:\.\d+)?)\s*(lakh crore|crore|cr|lakh|million|mn|billion|bn)\b"
+                 r"|\$\s*([\d,]+(?:\.\d+)?)\s*(million|mn|billion|bn)\b", I)
+PCT1 = re.compile(r"\b(profit|pat|net profit|revenue|sales|ebitda|income|earnings)\b[^.%]{0,40}?(\d{1,4}(?:\.\d+)?)\s?%", I)
+PCT2 = re.compile(r"(\d{1,4}(?:\.\d+)?)\s?%[^.]{0,25}\b(profit|pat|revenue|sales|ebitda|income|earnings)\b", I)
+STRONG = re.compile(r"\b(record(?! date)|highest ever|all-time high|biggest|largest|massive|historic|"
+                    r"multi-?year (high|low)|(surges?|jumps?|soars?|plunges?|tanks?) \d{2,}%|crashes?|collapses?)\b", I)
+SIZE_IDS = {"order_win", "buyback", "capacity", "debt_cut", "default_risk", "reg_action", "fraud",
+            "promoter_buy", "promoter_sell", "pledge", "pledge_invoked", "credit_up", "credit_down", "ops_halt"}
+_UNIT = {"lakh crore": 1e5, "crore": 1, "cr": 1, "lakh": 0.01, "million": 0.1, "mn": 0.1, "billion": 100, "bn": 100}
+
+
+def max_amount_cr(text):
+    best = 0.0
+    for m in AMT.finditer(text):
+        if m.group(1):
+            v, f = float(m.group(1).replace(",", "")), _UNIT[m.group(2).lower()]
+        else:  # USD, approx Rs 90 per dollar
+            v = float(m.group(3).replace(",", ""))
+            f = 9 if m.group(4).lower() in ("million", "mn") else 9000
+        best = max(best, v * f)
+    return best
+
+
+def max_pct(text):
+    vals = [float(m.group(2)) for m in PCT1.finditer(text)] + [float(m.group(1)) for m in PCT2.finditer(text)]
+    return max(vals) if vals else 0.0
+
+
+def size_bonus(text, ids):
+    b, note = 0, None
+    if ids & SIZE_IDS:
+        amt = max_amount_cr(text)
+        b = 3 if amt >= 5000 else 2 if amt >= 1500 else 1 if amt >= 500 else 0
+        if b:
+            note = f"\u2248\u20b9{amt:,.0f} cr"
+    if ids & {"results_strong", "results_weak"}:
+        p = max_pct(text)
+        pb = 2 if p >= 100 else 1 if p >= 30 else 0
+        if pb > b:
+            b, note = pb, f"{p:g}%"
+    return b, note
+
+
 def analyze(title, body, kind, has_stock):
     text = f"{title or ''}. {(body or '')[:1500]}"
     hits = []  # (kind, weight, id, label, snippet)
@@ -104,9 +148,11 @@ def analyze(title, body, kind, has_stock):
     if NOISE.search(text) and not strong:
         return 0, "neutral", "routine", None
     net = pos - neg
+    note = None
     if net != 0:
         sig, side = ("positive", "pos") if net > 0 else ("caution", "neg")
-        mag = min(10, abs(net))
+        sb_, note = size_bonus(text, {h[2] for h in hits if h[0] == side})
+        mag = min(10, abs(net) + sb_ + (1 if STRONG.search(text) else 0))
         if kind == "official":
             mag = min(10, mag + 1)       # confirmed exchange filing
         if kind == "media" and not has_stock:
@@ -119,6 +165,8 @@ def analyze(title, body, kind, has_stock):
         return 0, "neutral", None, None
     pick = sorted([h for h in hits if side is None or h[0] == side], key=lambda h: -h[1]) if side else sorted(hits, key=lambda h: -h[1])
     reason = "; ".join(f"{h[3]}: \u201c{h[4]}\u201d" for h in pick[:2])
+    if note:
+        reason += f" [{note}]"
     if side is None:
         reason = "Mixed signals - " + reason
     return mag, sig, pick[0][2], reason
@@ -128,5 +176,5 @@ def annotate(row):
     score, sig, cat, reason = analyze(
         row.get("title"), row.get("body"), row.get("kind", "official"),
         bool(row.get("symbol") or row.get("matched_symbols")))
-    return {"score": score, "signal": sig, "category": cat, "reason": reason,
+    return {"score": score, "score_base": score, "signal": sig, "category": cat, "reason": reason,
             "scored_at": dt.datetime.now(dt.timezone.utc).isoformat()}

@@ -28,7 +28,19 @@ CASES = [
  ("Outcome of Board Meeting", "Board approves bonus issue and stock split", "official", True, "positive", "bonus_split"),
  ("Fire at plant halts production at ABC Ltd", "", "media", True, "caution", "ops_halt"),
 ]
+SCORES = [  # (title, body, kind, has_stock, min_score, max_score)
+ ("Press Release", "ABC bags order worth Rs 5,000 crore, its largest ever", "official", True, 7, 10),
+ ("Press Release", "ABC bags order worth Rs 10 crore", "official", True, 3, 5),
+ ("Financial Results", "Net profit jumps 150% to Rs 300 crore", "official", True, 6, 8),
+ ("Financial Results", "Net profit rises 4% to Rs 300 crore", "official", True, 3, 5),
+ ("ABC wins $1 billion contract", "", "media", True, 6, 9),
+]
 bad = 0
+for t, b, k, hs, lo, hi in SCORES:
+    s_, sig, cat, why = analyze(t, b, k, hs)
+    ok = lo <= s_ <= hi
+    bad += not ok
+    print(("OK  " if ok else "FAIL"), "score", s_, f"(want {lo}-{hi})", "|", b or t, "|", why)
 for t, b, k, hs, es, ec in CASES:
     s, sig, cat, why = analyze(t, b, k, hs)
     ok = sig == es and (ec is None or cat == ec)

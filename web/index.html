@@ -21,7 +21,7 @@ input{width:52%}
 .positive{color:var(--ok)}.caution{color:#d33}.watch{color:#c80}
 .why{font-size:12px;margin:6px 0 0;color:var(--fg)}
 .chip{font-size:11px;background:var(--bg);border-radius:10px;padding:2px 7px;margin-right:4px}
-.body{color:var(--mut);font-size:13px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.body{color:var(--mut);font-size:13px;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
 .meta{color:var(--mut);font-size:12px;margin-top:6px}
 a{color:inherit}
 </style></head><body>
@@ -64,8 +64,8 @@ async function load(){
       ${i.signal&&i.signal!=="neutral"?`<span class="pill ${i.signal}">${{positive:"▲ POSITIVE",caution:"▼ CAUTION",watch:"● WATCH"}[i.signal]} ${i.score}/10</span>`:""}
       <span class="badge ${off?"official":"media"}">${off?"OFFICIAL":"MEDIA"} · ${esc(i.source)}</span>
       <b>${esc(i.company||i.symbol||"")}</b>
-      <p>${esc(i.title)}</p>${i.reason?`<div class="why">Why: ${esc(i.reason)}</div>`:""}${i.body?`<div class="body">${esc(i.body)}</div>`:""}
-      <div class="meta">${chips} ${i.published_at?new Date(i.published_at).toLocaleString():""}
+      <p>${esc(i.title)}</p>${i.reason?`<div class="why">Why: ${esc(i.reason)}</div>`:""}${(i.summary||i.body)?`<div class="body">${esc(i.summary||i.body)}</div>`:""}
+      <div class="meta">${chips}${i.summary_source==="gemini"||i.summary_source==="groq"?`<span class="chip">AI summary</span>`:""}${i.sources_count>1?`<span class="chip">✔ ${i.sources_count} sources</span>`:""} ${i.published_at?new Date(i.published_at).toLocaleString():""}
       ${i.url?` · <a href="${esc(i.url)}" target="_blank" rel="noopener">Read original</a>`:""}</div></div>`}).join("")
       :'<p class="card">Nothing here yet.</p>';
   }catch(e){$("list").innerHTML=`<p class="card">Could not load (${esc(e.message)}). Check config.js.</p>`}
