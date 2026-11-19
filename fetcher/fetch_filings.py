@@ -1,5 +1,5 @@
 """Fetch NSE corporate announcements and store them in Supabase."""
-import os, sys, hashlib, datetime as dt
+import os, sys, time, hashlib, datetime as dt
 import requests
 from signals import annotate
 
@@ -86,11 +86,21 @@ def record_health(source, status, count, error=None):
        "resolution=merge-duplicates,return=minimal")
 
 
+def retry(fn, tries=3, wait=6):
+    for i in range(tries):
+        try:
+            return fn()
+        except Exception:
+            if i == tries - 1:
+                raise
+            time.sleep(wait * (i + 1))
+
+
 def main():
     ok = 0
     for name, fn in (("NSE", fetch_nse),):
         try:
-            rows = fn()
+            rows = retry(fn)
             save_items(rows)
             record_health(name, "ok", len(rows))
             print(f"[{name}] OK - {len(rows)} announcements fetched")

@@ -128,3 +128,22 @@ input[type=range]{width:100%;accent-color:var(--brand)}
 .call .candle i{height:100%}
 .call .why{margin:0}
 #alerts-btn,#install{justify-self:start}
+
+.brandrow{display:flex;align-items:center;gap:6px}
+.health{width:30px;height:30px;display:grid;place-items:center;border-radius:50%}
+.health i{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.health.ok i{background:var(--pos)} .health.warn i{background:var(--watch)} .health.bad i{background:var(--neg)}
+.hlist{display:grid;gap:8px}
+.hrow{display:grid;grid-template-columns:12px 1fr;gap:4px 10px;align-items:baseline;background:var(--surface2);border-radius:12px;padding:10px 12px}
+.hrow::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--pos);align-self:center}
+.hrow.warn::before{background:var(--watch)} .hrow.bad::before{background:var(--neg)}
+.hrow b{font-size:.92rem} .hrow span{grid-column:2;font-size:.82rem;color:var(--muted)}
+.toast{position:absolute;z-index:6;left:16px;right:16px;bottom:calc(76px + env(safe-area-inset-bottom));background:var(--ink);color:var(--paper);border-radius:12px;padding:10px 14px;font-size:.88rem;box-shadow:var(--shadow)}
+.login{position:fixed;inset:0;z-index:20;background:var(--paper);display:grid;place-items:center;padding:20px}
+.login-card{width:min(400px,100%);display:grid;gap:14px}
+.login-msg{color:var(--muted)}
+.login-step{display:grid;gap:10px}
+.login label{font-size:.85rem;font-weight:600}
+.login input{font:inherit;font-size:1.1rem;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.login .btn{padding:13px 18px}
+#login-code{letter-spacing:.35em;text-align:center;font-variant-numeric:tabular-nums}

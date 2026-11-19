@@ -47,11 +47,83 @@ const state = {
 const feed = $("#feed");
 
 // ---------- data ----------
-async function api(path) {
-  const r = await fetch(`${U}/rest/v1/${path}`, { headers: { apikey: K, Authorization: `Bearer ${K}` } });
+// ---------- sign-in (Supabase email code) ----------
+const authStore = { get: () => store.get("sp_session", null), set: v => store.set("sp_session", v) };
+const auth = {
+  s: authStore.get(), pending: null,
+  async call(path, body) {
+    const r = await fetch(`${U}/auth/v1/${path}`, { method: "POST", headers: { apikey: K, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(j.msg || j.error_description || j.message || `HTTP ${r.status}`), { status: r.status });
+    return j;
+  },
+  keep(j, email) {
+    this.s = { access_token: j.access_token, refresh_token: j.refresh_token, expires_at: Math.floor(Date.now() / 1000) + (j.expires_in || 3600), email: (j.user && j.user.email) || email || (this.s && this.s.email) };
+    authStore.set(this.s);
+  },
+  sendCode: email => auth.call("otp", { email, create_user: false }),
+  async verify(email, token) { this.keep(await this.call("verify", { type: "email", email, token }), email); },
+  async refresh() {
+    if (!this.s || !this.s.refresh_token) throw Object.assign(new Error("signed out"), { status: 401 });
+    if (!this.pending) this.pending = this.call("token?grant_type=refresh_token", { refresh_token: this.s.refresh_token })
+      .then(j => this.keep(j)).finally(() => { this.pending = null; });
+    return this.pending;
+  },
+  async token() {
+    if (!this.s) return null;
+    if (this.s.expires_at - Date.now() / 1000 < 90) {
+      try { await this.refresh(); } catch (e) { if (e.status) throw e; /* offline: keep the old token, the cache may still answer */ }
+    }
+    return this.s.access_token;
+  },
+  async out() {
+    this.s = null; authStore.set(null);
+    ["sp_watch", "sp_companies", "sp_alerts", "sp_call"].forEach(k => { try { localStorage.removeItem(k); } catch {} });
+    try { await caches.delete("sp-data"); } catch {}
+  }
+};
+async function api(path, o = {}) {
+  let tok;
+  try { tok = await auth.token(); } catch (e) { if ([400, 401, 403].includes(e.status)) await auth.out(); tok = null; }
+  if (!tok) { showLogin(); throw new Error("Sign in required"); }
+  const go = t => fetch(`${U}/rest/v1/${path}`, { method: o.method || "GET", body: o.body ? JSON.stringify(o.body) : undefined,
+    headers: { apikey: K, Authorization: `Bearer ${t}`, ...(o.body ? { "Content-Type": "application/json" } : {}), ...(o.prefer ? { Prefer: o.prefer } : {}) } });
+  let r = await go(tok);
+  if (r.status === 401) {
+    try { await auth.refresh(); r = await go(auth.s.access_token); } catch { await auth.out(); showLogin(); throw new Error("Session expired"); }
+  }
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+  const t = await r.text();
+  try { return t ? JSON.parse(t) : null; } catch { return null; }
 }
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 3600); }
+function showLogin() {
+  $("#login").hidden = false; $("#step-email").hidden = false; $("#step-code").hidden = true;
+  setTimeout(() => $("#login-email")?.focus(), 50);
+}
+let loginEmail = "";
+$("#login-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const msg = $("#login-msg"), onCode = !$("#step-code").hidden;
+  try {
+    if (!onCode) {
+      loginEmail = $("#login-email").value.trim().toLowerCase();
+      $("#login-send").disabled = true; msg.textContent = "Sending code…";
+      await auth.sendCode(loginEmail);
+      $("#step-email").hidden = true; $("#step-code").hidden = false; $("#login-code").value = ""; $("#login-code").focus();
+      msg.textContent = `We sent a 6-digit code to ${loginEmail}. It can take a minute to arrive.`;
+    } else {
+      $("#login-verify").disabled = true; msg.textContent = "Checking code…";
+      await auth.verify(loginEmail, $("#login-code").value.trim());
+      $("#login").hidden = true; msg.textContent = ""; await afterLogin();
+    }
+  } catch (err) {
+    msg.textContent = onCode ? "That code did not work. Check it and try again, or request a new one."
+      : (err.status === 429 ? "Too many attempts. Wait a minute and try again." : "Could not send a code. Check the address, or ask the owner to add you.");
+  } finally { $("#login-send").disabled = false; $("#login-verify").disabled = false; }
+});
+$("#login-back").onclick = () => { $("#step-code").hidden = true; $("#step-email").hidden = false; $("#login-msg").textContent = "Sign in with your email. We will send you a 6-digit code."; };
+
 const sinceISO = d => new Date(Date.now() - d * 864e5).toISOString();
 function buildQuery() {
   if (state.tab === "calls") {
@@ -223,6 +295,10 @@ function toggleWatch(sym) {
   store.set("sp_watch", state.watch);
   $$(`[data-sym="${qa(sym)}"]`).forEach(b => b.setAttribute("aria-pressed", String(state.watch.includes(sym))));
   $$(`.star[data-star="${qa(sym)}"]`).forEach(b => b.setAttribute("aria-pressed", String(state.watch.includes(sym))));
+  const on = state.watch.includes(sym);
+  (on ? api("watchlist", { method: "POST", body: [{ symbol: sym }], prefer: "resolution=ignore-duplicates,return=minimal" })
+      : api(`watchlist?symbol=eq.${encodeURIComponent(sym)}`, { method: "DELETE" }))
+    .catch(() => toast("Could not save to your account. Kept on this device only."));
   renderStrip(); syncPushSoon();
   if (state.tab === "watch" || (state.tab === "calls" && state.call.mine)) reloadSoon();
 }
@@ -242,10 +318,7 @@ function renderStrip() {
 const VAPID = (window.CONFIG || {}).VAPID_PUBLIC_KEY;
 const pushOK = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 const u8 = b64 => { const r = atob((b64 + "=".repeat((4 - b64.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from([...r].map(c => c.charCodeAt(0))); };
-async function rpc(fn, args) {
-  const r = await fetch(`${U}/rest/v1/rpc/${fn}`, { method: "POST", headers: { apikey: K, Authorization: `Bearer ${K}`, "Content-Type": "application/json" }, body: JSON.stringify(args) });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-}
+const rpc = (fn, args) => api(`rpc/${fn}`, { method: "POST", body: args });
 const getSub = async () => pushOK ? (await navigator.serviceWorker.ready).pushManager.getSubscription() : null;
 async function saveSub(sub) {
   const j = sub.toJSON();
@@ -298,7 +371,7 @@ function syncSheet() {
 let lastFocus;
 function openLayer(el, withScrim) { lastFocus = document.activeElement; el.hidden = false; $("#scrim").hidden = !withScrim; }
 function closeLayers() {
-  ["#sheet", "#search", "#scrim"].forEach(s => { $(s).hidden = true; });
+  ["#sheet", "#search", "#health-sheet", "#scrim"].forEach(s => { $(s).hidden = true; });
   if (lastFocus?.focus) lastFocus.focus();
 }
 function openSearch(mode) {
@@ -377,12 +450,50 @@ document.addEventListener("keydown", e => {
   }
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && Date.now() - state.loadedAt > 5 * 60e3 && $("#sheet").hidden && $("#search").hidden) reload();
+  if (document.visibilityState === "visible" && Date.now() - state.loadedAt > 5 * 60e3 && $("#sheet").hidden && $("#search").hidden && auth.s) { reload(); loadHealth(); }
 });
+
+// ---------- source health ----------
+async function loadHealth() {
+  const btn = $("#btn-health");
+  try {
+    const rows = await api("source_health?select=*&order=source");
+    const now = Date.now(), list = rows.map(r => {
+      const age = r.last_run ? (now - new Date(r.last_run)) / 60000 : 1e9, failing = r.last_status === "error", stale = age > 90;
+      const soft = ["AI summaries", "Push alerts", "Analyst calls"].includes(r.source);
+      const level = failing || stale ? (soft ? "warn" : (r.source === "NSE" ? "bad" : "warn")) : "ok";
+      const text = failing ? `Failing: ${(r.last_error || "unknown error").slice(0, 80)}` : stale ? `No update for ${age > 1e6 ? "a long time" : Math.round(age / 60) + " hours"}` : `Working, ${r.last_count ?? 0} items, ${ago(r.last_run)}`;
+      return { name: r.source, level, text };
+    }).sort((a, b) => (a.level === "ok") - (b.level === "ok"));
+    const bad = list.filter(x => x.level !== "ok").length, worst = list.some(x => x.level === "bad") ? "bad" : bad ? "warn" : "ok";
+    btn.className = `health ${worst}`;
+    btn.setAttribute("aria-label", worst === "ok" ? "All data sources are working" : `${bad} data source${bad > 1 ? "s" : ""} need attention`);
+    $("#health-sum").textContent = bad ? `${bad} of ${list.length} sources need attention.` : "All sources are working.";
+    $("#health-list").innerHTML = list.map(x => `<div class="hrow ${x.level}"><b>${esc(x.name)}</b><span>${esc(x.text)}</span></div>`).join("") || "<p class='fine'>No data yet.</p>";
+  } catch { btn.className = "health"; btn.setAttribute("aria-label", "Data source status unavailable"); }
+}
+$("#btn-health").onclick = () => { loadHealth(); openLayer($("#health-sheet"), true); };
+$("#health-close").onclick = closeLayers;
+$("#signout").onclick = async () => { closeLayers(); await auth.out(); state.watch = []; state.companies = []; feed.innerHTML = ""; showLogin(); };
+async function loadWatchlistFromAccount() {
+  try {
+    const db = (await api("watchlist?select=symbol")).map(r => r.symbol);
+    const local = state.watch.filter(x => !db.includes(x));
+    if (!db.length && local.length) await api("watchlist", { method: "POST", body: local.map(symbol => ({ symbol })), prefer: "resolution=ignore-duplicates,return=minimal" });
+    state.watch = db.length ? db : local; store.set("sp_watch", state.watch);
+  } catch {}
+}
+async function afterLogin() {
+  $("#acct").textContent = auth.s && auth.s.email ? `Signed in as ${auth.s.email}` : "Signed in";
+  state.ready = loadCompanies().catch(() => {});
+  await loadWatchlistFromAccount();
+  renderStrip(); reload(); loadHealth(); updateAlertsUI();
+}
 
 // ---------- init ----------
 $("#sector-chips").innerHTML = ["all", ...SECTORS].map(s => `<button data-v="${esc(s)}">${s === "all" ? "All sectors" : esc(s)}</button>`).join("");
 applyTheme(); syncSheet(); renderStrip();
 if (!U || U.includes("YOUR-PROJECT")) showNote("Add your Supabase details", "Open web/config.js and paste your project URL and anon key.");
-else { state.ready = loadCompanies().catch(() => {}); reload(); }
+else if (!auth.s) showLogin();
+else afterLogin();
 })();
