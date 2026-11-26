@@ -42,7 +42,7 @@ const state = {
   watch: store.get("sp_watch", []).filter(s => /^[A-Z0-9&-]+$/.test(s)),
   names: {}, sect: {}, companies: [], ready: Promise.resolve(),
   call: { rating: "all", mine: false, ...store.get("sp_call", {}) },
-  alerts: { watchMin: 3, globalMin: 7, ...store.get("sp_alerts", {}) }, theme: store.get("sp_theme", "auto")
+  alerts: { watchMin: 3, globalMin: 3, ...store.get("sp_alerts", {}) }, theme: store.get("sp_theme", "auto")
 };
 const feed = $("#feed");
 
@@ -364,7 +364,10 @@ function setTab(t) {
 }
 function syncSheet() {
   $$("[data-f]").forEach(g => $$("button", g).forEach(b => b.setAttribute("aria-pressed", String(String(state.f[g.dataset.f]) === b.dataset.v))));
-  $$("[data-a]").forEach(g => $$("button", g).forEach(b => b.setAttribute("aria-pressed", String(String(state.alerts[g.dataset.a]) === b.dataset.v))));
+  ["watchMin", "globalMin"].forEach(k => {
+    const v = Math.min(8, Math.max(1, Number(state.alerts[k]) || 3));
+    $("#" + k).value = v; $("#" + k + "Val").textContent = v;
+  });
   updateAlertsUI();
   $("#minScore").value = state.f.minScore; $("#minScoreVal").textContent = state.f.minScore;
 }
@@ -420,8 +423,6 @@ document.addEventListener("click", e => {
     if (t.dataset.call === "mine") state.call.mine = !state.call.mine; else state.call.rating = t.dataset.call.split(":")[1];
     store.set("sp_call", state.call); renderStrip(); return reloadSoon();
   }
-  const ga = t.closest("[data-a]");
-  if (ga && t.dataset.v !== undefined) { state.alerts[ga.dataset.a] = Number(t.dataset.v); store.set("sp_alerts", state.alerts); syncSheet(); return syncPushSoon(); }
   const act = t.dataset.act;
   if (act === "add") return openSearch("add");
   if (act === "retry") return reload();
@@ -437,6 +438,12 @@ $("#btn-filter").onclick = () => { syncSheet(); openLayer($("#sheet"), true); };
 $("#sheet-close").onclick = $("#search-close").onclick = closeLayers;
 $("#scrim").onclick = closeLayers;
 $("#reset").onclick = () => { state.f = { ...DEFAULTS }; store.set("sp_filters", state.f); syncSheet(); reloadSoon(); };
+["watchMin", "globalMin"].forEach(k => {
+  $("#" + k).oninput = e => {
+    state.alerts[k] = Number(e.target.value); $("#" + k + "Val").textContent = e.target.value;
+    store.set("sp_alerts", state.alerts); syncPushSoon();
+  };
+});
 $("#minScore").oninput = e => { state.f.minScore = Number(e.target.value); $("#minScoreVal").textContent = state.f.minScore; store.set("sp_filters", state.f); reloadSoon(); };
 $("#q").oninput = () => { clearTimeout(window._qt); window._qt = setTimeout(runSearch, 150); };
 $("#btn-theme").onclick = () => { state.theme = { auto: "light", light: "dark", dark: "auto" }[state.theme]; store.set("sp_theme", state.theme); applyTheme(); };

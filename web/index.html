@@ -60,10 +60,10 @@
     <div class="field"><h3>Alerts <small>on this device</small></h3>
       <p class="fine" id="alerts-status">Checking…</p>
       <button id="alerts-btn" class="btn" type="button" hidden>Turn on alerts</button></div>
-    <div class="field"><h3>Alert me for my stocks at score <small>or higher</small></h3><div class="seg" data-a="watchMin">
-      <button data-v="3">3</button><button data-v="4">4</button><button data-v="5">5</button></div></div>
-    <div class="field"><h3>Alert me for any stock at score <small>or higher</small></h3><div class="seg" data-a="globalMin">
-      <button data-v="6">6</button><button data-v="7">7</button><button data-v="8">8</button><button data-v="11">Off</button></div></div>
+    <div class="field"><h3>Alert me for my stocks at score <small>or higher</small> <output id="watchMinVal">3</output></h3>
+      <input id="watchMin" type="range" min="1" max="8" step="1" value="3" aria-label="Minimum score for alerts on my stocks"></div>
+    <div class="field"><h3>Alert me for any stock at score <small>or higher</small> <output id="globalMinVal">3</output></h3>
+      <input id="globalMin" type="range" min="1" max="8" step="1" value="3" aria-label="Minimum score for alerts on any stock"></div>
     <button id="install" class="btn" type="button" hidden>Install app on this device</button>
     <button id="reset" class="text-btn">Reset filters</button>
     <p class="fine">Signals come from keyword rules applied to exchange filings and news. Analyst calls are reported by publishers and are not verified by StockPulse. They highlight what to read, not what to buy or sell, and are not investment advice.</p>

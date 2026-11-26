@@ -51,7 +51,7 @@ def main():
     since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
     items = requests.get(f"{SUPABASE_URL}/rest/v1/items", params={
         "select": "external_id,source,symbol,company,title,summary,signal,score,matched_symbols",
-        "alerted_at": "is.null", "signal": "in.(positive,caution)", "score": "gte.3",
+        "alerted_at": "is.null", "signal": "in.(positive,caution)", "score": "gte.1",
         "published_at": f"gte.{since}", "order": "score.desc", "limit": 100}, headers=H, timeout=30).json()
     if not isinstance(items, list) or not items:
         print("[alerts] no new signals")
